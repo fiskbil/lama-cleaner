@@ -44,17 +44,23 @@ class InpaintModel:
 
     def _pad_forward(self, image, mask, config: Config):
         origin_height, origin_width = image.shape[:2]
-        pad_image = pad_img_to_modulo(
-            image, mod=self.pad_mod, square=self.pad_to_square, min_size=self.min_size
+        
+        padding_bias = self._calculate_padding_bias(mask)
+        logger.info(f"padding bias: {padding_bias}")
+        (pad_image, padding_image) = pad_img_to_modulo(
+            image, mod=self.pad_mod, square=self.pad_to_square, min_size=self.min_size, padding_bias=padding_bias
         )
-        pad_mask = pad_img_to_modulo(
-            mask, mod=self.pad_mod, square=self.pad_to_square, min_size=self.min_size
+        (pad_mask, _) = pad_img_to_modulo(
+            mask, mod=self.pad_mod, square=self.pad_to_square, min_size=self.min_size, padding_bias=padding_bias
         )
 
         logger.info(f"final forward pad size: {pad_image.shape}")
+        logger.info(f"image padding: {padding_image}")
 
         result = self.forward(pad_image, pad_mask, config)
-        result = result[0:origin_height, 0:origin_width, :]
+        result = result[padding_image[1]:origin_height+padding_image[1], padding_image[0]:origin_width+padding_image[0], :]
+
+        logger.info(f"result shape: {result.shape}")
 
         result, image, mask = self.forward_post_process(result, image, mask, config)
 
@@ -230,6 +236,20 @@ class InpaintModel:
         crop_img = image[t:b, l:r, :]
         crop_mask = mask[t:b, l:r]
         return crop_img, crop_mask, (l, t, r, b)
+        
+    def _calculate_padding_bias(self, mask):
+        # extract the edges of the mask and calculate padding based on which edges have masked areas
+        mask_edges = [mask[:, 0], mask[0, :], mask[:, -1], mask[-1, :]]
+        padding = [int(np.max(edge) == 0) for edge in mask_edges]
+        if (padding[0] + padding[2] == 0):
+            padding[0] = padding[2] = 1
+        if (padding[1] + padding[3] == 0):
+            padding[1] = padding[3] = 1
+        padding = (
+            padding[0] / (padding[0] + padding[2]),
+            padding[1] / (padding[1] + padding[3]),
+        )
+        return padding
 
     def _run_box(self, image, mask, box, config: Config):
         """

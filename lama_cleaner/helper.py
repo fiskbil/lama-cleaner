@@ -122,7 +122,7 @@ def resize_max_size(
 
 
 def pad_img_to_modulo(
-    img: np.ndarray, mod: int, square: bool = False, min_size: Optional[int] = None
+    img: np.ndarray, mod: int, square: bool = False, min_size: Optional[int] = None, padding_bias: tuple = (0, 0)
 ):
     """
 
@@ -131,6 +131,7 @@ def pad_img_to_modulo(
         mod:
         square: 是否为正方形
         min_size:
+        padding_bias: (left, up) bias
 
     Returns:
 
@@ -151,11 +152,19 @@ def pad_img_to_modulo(
         out_height = max_size
         out_width = max_size
 
+    padding_height = out_height - height
+    padding_width = out_width - width
+
+    padding_left = int(padding_width * padding_bias[0])
+    padding_top = int(padding_height * padding_bias[1])
+    padding_right = padding_width - padding_left
+    padding_bottom = padding_height - padding_top
+
     return np.pad(
         img,
-        ((0, out_height - height), (0, out_width - width), (0, 0)),
+        ((padding_top, padding_bottom), (padding_left, padding_right), (0, 0)),
         mode="symmetric",
-    )
+    ), (padding_left, padding_top)
 
 
 def boxes_from_mask(mask: np.ndarray) -> List[np.ndarray]:
